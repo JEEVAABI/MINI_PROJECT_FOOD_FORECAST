@@ -13,7 +13,7 @@ This project is a predictive analytics application designed to forecast food pre
 - Classifies students into different study years for personalized predictions.
 - Considers demographic factors to tailor food recommendations to each student.
 ### Count Prediction Model
-- Utilizes machine learning techniques to predict the count of each food item.
+- Utilizes Multi Layer Perceptron techniques to predict the count of each food item.
 - Accounts for various factors such as historical consumption patterns and student preferences.
 - Enhances accuracy in forecasting by addressing individual variations.
 ### Visualizations
@@ -28,8 +28,8 @@ This project is a predictive analytics application designed to forecast food pre
 
 ## Architecture Diagram/Flow
 
-![OUTPUT](./output%20img/METHD.png)
-![output](./output%20img/ARCH.png)
+![OUTPUT](./output%20img/ARCH.png)
+![out](./output%20img/METHD.png)
 
 ## Installation
 
@@ -58,10 +58,13 @@ This project is a predictive analytics application designed to forecast food pre
     ```shell
     !pip install pgmpy
     ```
-4. Enter the day to find out what food-items are prefered.
-5. prefered food-item count will be displayed. 
-
-
+5. Enter the day to find out what food-items are prefered. 
+6. Install this package before model-2
+    ```shell
+    !pip install tensorflow
+    ```
+7. Enter the day and total count of consumers.
+8. prefered food-item count will be displayed. 
 
 ## Program:
 # VISUALIZING PREFERED FOOD CONSUMPTION
@@ -298,6 +301,78 @@ selected_columns = predicted_data.columns[predicted_data.iloc[0] == 1].tolist()
 
 print(selected_columns)
 ```
+### MLP Model For Food Count Prediction 
+```python
+import pandas as pd
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import mean_squared_error, r2_score
+from tensorflow.keras.models import Sequential
+from tensorflow.keras.layers import Dense
+from sklearn.preprocessing import LabelEncoder
+from tensorflow.keras.optimizers import Adam
+
+# Load and preprocess the data
+df = pd.read_csv("data1.csv")
+label_encoder_day = LabelEncoder()
+label_encoder_food_item = LabelEncoder()
+df['DAYS'] = label_encoder_day.fit_transform(df['DAYS'])
+for column in ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']:
+    df[column] = label_encoder_food_item.fit_transform(df[column])
+
+# Split the data
+X = df[['DAYS'] + ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']]
+y = df['TOTAL COUNT']
+X_scaled = StandardScaler().fit_transform(X)
+X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
+
+# Build and train neural network models for each food item
+models = {food_item: Sequential([
+    Dense(128, activation='relu', input_dim=X_train.shape[1]),
+    Dense(256, activation='relu'),
+    Dense(128, activation='relu'),
+    Dense(64, activation='relu'),
+    Dense(32, activation='relu'),
+    Dense(16, activation='relu'),
+    Dense(1, activation='linear')
+]) for food_item in ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']}
+for food_item, model_food_item in models.items():
+    model_food_item.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
+    model_food_item.fit(X_train, df[food_item], epochs=300, batch_size=128, validation_split=0.2, verbose=0)
+
+# Evaluate the model on the testing data
+y_pred_test = sum(model.predict(X_test).flatten() for model in models.values())
+mse_test = mean_squared_error(y_test, y_pred_test)
+
+# Define daily food preferences
+daily_food_item_preferences = {
+    'MONDAY': {'IDLY': 0.432, 'DOSAI': 0.568},
+    'TUESDAY': {'IDLY': 0.477, 'UTHAPPAM': 0.523},
+    'WEDNESDAY': {'IDLY': 0.234, 'POORI': 0.766},
+    'THURSDAY': {'IDLY': 0.57, 'VEG-KITCHDI': 0.43},
+    'FRIDAY': {'IDLY': 0.358, 'PONGAL': 0.642},
+    'SATURDAY': {'IDLY': 0.553, 'SEMIYA UPMA': 0.447},
+    'SUNDAY': {'EGG-NOODLES': 0.673, 'VEG-NOODLES': 0.327}
+}
+
+# User input
+input_day = input("Enter the day: ").upper()
+input_food_item1 = input("Enter the first food item: ").upper()
+input_food_item2 = input("Enter the second food item: ").upper()
+input_total_count = float(input("Enter the total count: "))
+
+# Prepare input for prediction
+encoded_day = label_encoder_day.transform([input_day])[0]
+user_input = pd.DataFrame({'DAYS': [encoded_day], **{column: 0 for column in ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']}})
+user_input[input_food_item1] = daily_food_item_preferences[input_day][input_food_item1]
+user_input[input_food_item2] = daily_food_item_preferences[input_day][input_food_item2]
+user_input['TOTAL COUNT'] = input_total_count
+user_input_scaled = StandardScaler().fit_transform(user_input.drop(columns=['TOTAL COUNT']))
+
+# Predict counts for each food item
+predicted_counts_food_item1 = models[input_food_item1].predict(user_input_scaled).
+```
 ## Output:
 ### FOOD CONSUMPTION 
 #### Data Set
@@ -316,6 +391,12 @@ print(selected_columns)
 #### PREDICTED FOOD FOR USER INPUT DAY
 ![OUTPUT](./output%20img/input.png)
 ![OUTPUT](./output%20img/fooditem.png)
+
+### MLP FOR FOOD COUNT PREDICTION
+#### Data Set
+![OUTPUT](./output%20img/FoodCountDataSet.png)
+#### Predicted Food Count: 
+![OUTPUT](./output%20img/Count%20Prediction.png)
 
 
 ## Result:
