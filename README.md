@@ -28,7 +28,8 @@ This project is a predictive analytics application designed to forecast food pre
 
 ## Architecture Diagram/Flow
 
-![OUTPUT](METHODOLOGY.jpg)
+![OUTPUT](./output%20img/METHD.png)
+![output](./output%20img/ARCH.png)
 
 ## Installation
 
