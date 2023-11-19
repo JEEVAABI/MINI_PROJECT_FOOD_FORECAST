@@ -62,6 +62,7 @@ This project is a predictive analytics application designed to forecast food pre
 6. Install this package before model-2
     ```shell
     !pip install tensorflow
+    !pip install scikit-learn
     ```
 7. Enter the day and total count of consumers.
 8. prefered food-item count will be displayed. 
@@ -313,39 +314,72 @@ from tensorflow.keras.layers import Dense
 from sklearn.preprocessing import LabelEncoder
 from tensorflow.keras.optimizers import Adam
 
+from tensorflow.keras.preprocessing import sequence
+from keras import layers
+from keras.models import Model
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error
+import matplotlib.pyplot as plt
+
 # Load and preprocess the data
 df = pd.read_csv("data1.csv")
+
+# Encode categorical features (Day and Food Item)
 label_encoder_day = LabelEncoder()
 label_encoder_food_item = LabelEncoder()
+
 df['DAYS'] = label_encoder_day.fit_transform(df['DAYS'])
 for column in ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']:
     df[column] = label_encoder_food_item.fit_transform(df[column])
 
-# Split the data
-X = df[['DAYS'] + ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']]
-y = df['TOTAL COUNT']
-X_scaled = StandardScaler().fit_transform(X)
+numeric_columns = df.select_dtypes(include=[np.number]).columns
+df_imputed = df.copy()
+
+food_item_columns = ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']
+
+X = df_imputed[['DAYS'] + food_item_columns]
+y = df_imputed['TOTAL COUNT']
+
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(X)
+
 X_train, X_test, y_train, y_test = train_test_split(X_scaled, y, test_size=0.2, random_state=42)
 
-# Build and train neural network models for each food item
-models = {food_item: Sequential([
-    Dense(128, activation='relu', input_dim=X_train.shape[1]),
-    Dense(256, activation='relu'),
-    Dense(128, activation='relu'),
-    Dense(64, activation='relu'),
-    Dense(32, activation='relu'),
-    Dense(16, activation='relu'),
-    Dense(1, activation='linear')
-]) for food_item in ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']}
-for food_item, model_food_item in models.items():
+# Build a more complex neural network model for each food item
+models = {}
+for food_item in food_item_columns:
+    model_food_item = Sequential()
+    model_food_item.add(Dense(128, activation='relu', input_dim=X_train.shape[1]))
+    model_food_item.add(Dense(256, activation='relu'))
+    model_food_item.add(Dense(128, activation='relu'))
+    model_food_item.add(Dense(64, activation='relu'))
+    model_food_item.add(Dense(32, activation='relu'))
+    model_food_item.add(Dense(16, activation='relu'))
+    model_food_item.add(Dense(1, activation='linear'))
     model_food_item.compile(optimizer=Adam(learning_rate=0.001), loss='mean_squared_error')
-    model_food_item.fit(X_train, df[food_item], epochs=300, batch_size=128, validation_split=0.2, verbose=0)
+    models[food_item] = model_food_item
+
+# Train each model separately
+for food_item, model_food_item in models.items():
+    y_train_food_item = df_imputed[food_item]
+    model_food_item.fit(X_train, y_train_food_item, epochs=300, batch_size=128, validation_split=0.2, verbose=0)
 
 # Evaluate the model on the testing data
 y_pred_test = sum(model.predict(X_test).flatten() for model in models.values())
-mse_test = mean_squared_error(y_test, y_pred_test)
 
-# Define daily food preferences
+# Calculate Mean Squared Error (MSE)
+mse_test = mean_squared_error(y_test, y_pred_test)
+print(f'Test Mean Squared Error (MSE): {mse_test:.2f}')
+
+# Calculate Root Mean Squared Error (RMSE)
+rmse_test = np.sqrt(mse_test)
+print(f'Test Root Mean Squared Error (RMSE): {rmse_test:.2f}')
+
+# Calculate R-squared
+r2_test = r2_score(y_test, y_pred_test)
+print(f'Test R-squared: {r2_test:.2f}')
+
+# Use a dictionary to map food items to preferences
 daily_food_item_preferences = {
     'MONDAY': {'IDLY': 0.432, 'DOSAI': 0.568},
     'TUESDAY': {'IDLY': 0.477, 'UTHAPPAM': 0.523},
@@ -356,22 +390,47 @@ daily_food_item_preferences = {
     'SUNDAY': {'EGG-NOODLES': 0.673, 'VEG-NOODLES': 0.327}
 }
 
-# User input
-input_day = input("Enter the day: ").upper()
-input_food_item1 = input("Enter the first food item: ").upper()
-input_food_item2 = input("Enter the second food item: ").upper()
+# Take input for prediction during runtime
+input_food_item1 = selected_columns[0]
+input_food_item2 = selected_columns[1]
 input_total_count = float(input("Enter the total count: "))
 
-# Prepare input for prediction
 encoded_day = label_encoder_day.transform([input_day])[0]
-user_input = pd.DataFrame({'DAYS': [encoded_day], **{column: 0 for column in ['IDLY', 'DOSAI', 'PONGAL', 'UTHAPPAM', 'POORI', 'VEG-KITCHDI', 'SEMIYA UPMA', 'EGG-NOODLES', 'VEG-NOODLES']}})
+
+user_input = pd.DataFrame({'DAYS': [encoded_day]})
+for column in food_item_columns:
+    user_input[column] = 0
+
+# Set the values for the specified food items using daily preferences
 user_input[input_food_item1] = daily_food_item_preferences[input_day][input_food_item1]
 user_input[input_food_item2] = daily_food_item_preferences[input_day][input_food_item2]
-user_input['TOTAL COUNT'] = input_total_count
-user_input_scaled = StandardScaler().fit_transform(user_input.drop(columns=['TOTAL COUNT']))
 
-# Predict counts for each food item
-predicted_counts_food_item1 = models[input_food_item1].predict(user_input_scaled).
+# Normalize total count to ensure it is consistent with the training data
+user_input['TOTAL COUNT'] = input_total_count
+
+user_input_scaled = scaler.transform(user_input.drop(columns=['TOTAL COUNT']))
+
+# Predict the counts for each food item using the trained neural networks
+predicted_counts_food_item1 = models[input_food_item1].predict(user_input_scaled).flatten()[0]
+predicted_counts_food_item2 = models[input_food_item2].predict(user_input_scaled).flatten()[0]
+
+# Denormalize the predicted counts
+predicted_counts_food_item1 = predicted_counts_food_item1 * np.sqrt(mse_test) + np.mean(y_test)
+predicted_counts_food_item2 = predicted_counts_food_item2 * np.sqrt(mse_test) + np.mean(y_test)
+
+# Ensure that the sum of predicted counts does not exceed the total count
+total_count_limit = input_total_count * 1.05  # Adjust the multiplier as needed
+sum_of_predicted_counts = predicted_counts_food_item1 + predicted_counts_food_item2
+if sum_of_predicted_counts > total_count_limit:
+    # Scale back the predicted counts to meet the total count limit
+    scale_factor = total_count_limit / sum_of_predicted_counts
+    predicted_counts_food_item1 *= scale_factor
+    predicted_counts_food_item2 *= scale_factor
+
+print(f"Predicted count for {input_day}, {input_food_item1}: {predicted_counts_food_item1:.2f}")
+print(f"Predicted count for {input_day}, {input_food_item2}: {predicted_counts_food_item2:.2f}")
+print(f"Sum of predicted counts: {predicted_counts_food_item1 + predicted_counts_food_item2:.2f}")
+
 ```
 ## Output:
 ### FOOD CONSUMPTION 
